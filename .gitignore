@@ -1,0 +1,16 @@
+.vercel/
+
+# Environment variables
+.env*.local
+
+# Node
+node_modules/
+.next/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
