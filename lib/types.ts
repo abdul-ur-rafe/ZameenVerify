@@ -108,6 +108,11 @@ export interface AuditVerification {
    * actually verify. Undefined when no record in the batch had an
    * e_stamp_no to check at all. */
   e_stamp_check?: EStampCheckResult
+  /** Result of cross-referencing the batch's identity/parcel fields
+   * against a SIMULATED court-cases table — see LitigationCheckResult
+   * below. Undefined when there was no CNIC or khasra_no on any record
+   * to check against at all. */
+  litigation_check?: LitigationCheckResult
 }
 
 /** status meanings:
@@ -164,6 +169,26 @@ export interface EStampCheckResult {
   missing_on: string[] // file names or record identifiers missing e_stamp_no
   duplicate_across_batch: { token: string; recordLabels: string[] }[]
   format_warnings: { recordLabel: string; token: string; reason: string }[]
+}
+
+/** Result of cross-referencing this batch's identity fields (CNIC) and
+ * parcel identifier (khasra_no) against a SIMULATED court-cases table
+ * (mock_punjab_courts in Supabase) — a demo stand-in for a real courts
+ * database integration, which isn't publicly accessible the same way
+ * PLRA's registry isn't. Matches on EITHER a CNIC match OR a khasra_no
+ * match (not requiring both), since a case could plausibly be filed
+ * against a person without the exact parcel being named in the case
+ * record, or vice versa — either kind of match is worth surfacing to
+ * a reviewer, though CNIC+khasra_no both matching is a stronger signal
+ * than either alone (see match_strength). */
+export interface LitigationCheckResult {
+  status: "no_identifiers" | "clear" | "active_case_found"
+  matches: {
+    case_no: string
+    case_title?: string
+    status_text: string // e.g. "Stay Order Active", "Pending Hearing"
+    matched_on: ("cnic" | "khasra_no")[]
+  }[]
 }
 
 export interface AuditResponse {

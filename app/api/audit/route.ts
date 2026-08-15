@@ -526,6 +526,85 @@ so you do not need to invent a special value for that case yourself.
       );
     }
 
+    // --- SIMULATED litigation cross-reference -----------------------------
+    // Demo stand-in for a real courts-records integration — see the
+    // comment on mock_punjab_courts in supabase-mock-plra-registry.sql.
+    // Matches on CNIC (from owner_name/cnic on a Fard, or seller's
+    // identity on a registry doc) OR khasra_no — not requiring both,
+    // since a real case record might reference the person without the
+    // exact parcel or vice versa. Deterministic DB lookup, same
+    // reasoning as the other two checks for why this isn't an LLM call.
+    const cnicsInBatch = Array.from(
+      new Set(
+        records
+          .map((r: any) => (typeof r?.cnic === 'string' ? r.cnic.trim() : ''))
+          .filter((c: string) => c.length > 0)
+      )
+    );
+    const khasraNosInBatch = Array.from(
+      new Set(
+        records
+          .map((r: any) => (typeof r?.khasra_no === 'string' ? r.khasra_no.trim() : ''))
+          .filter((k: string) => k.length > 0)
+      )
+    );
+
+    let litigationCheck: any = { status: 'no_identifiers', matches: [] };
+
+    if (cnicsInBatch.length > 0 || khasraNosInBatch.length > 0) {
+      let courtsQuery = supabase.from('mock_punjab_courts').select('*').eq('is_active', true);
+      // Supabase .or() needs a single combined filter string — build it
+      // from whichever identifier lists are actually non-empty, so we
+      // don't emit a malformed "cnic.in.()" clause when one list is empty.
+      const orClauses: string[] = [];
+      if (cnicsInBatch.length > 0) {
+        orClauses.push(`cnic.in.(${cnicsInBatch.map((c) => `"${c}"`).join(',')})`);
+      }
+      if (khasraNosInBatch.length > 0) {
+        orClauses.push(`khasra_no.in.(${khasraNosInBatch.map((k) => `"${k}"`).join(',')})`);
+      }
+      courtsQuery = courtsQuery.or(orClauses.join(','));
+
+      const { data: courtRows, error: courtsError } = await courtsQuery;
+
+      if (courtsError) {
+        console.error('mock_punjab_courts lookup failed:', courtsError);
+        litigationCheck = { status: 'no_identifiers', matches: [] };
+      } else if (courtRows && courtRows.length > 0) {
+        const matches = courtRows.map((row: any) => {
+          const matchedOn: string[] = [];
+          if (row.cnic && cnicsInBatch.includes(row.cnic)) matchedOn.push('cnic');
+          if (row.khasra_no && khasraNosInBatch.includes(row.khasra_no)) matchedOn.push('khasra_no');
+          return {
+            case_no: row.case_no,
+            case_title: row.case_title || undefined,
+            status_text: row.status_text,
+            matched_on: matchedOn,
+          };
+        });
+        litigationCheck = { status: 'active_case_found', matches };
+      } else {
+        litigationCheck = { status: 'clear', matches: [] };
+      }
+    }
+
+    cleanVerifyJson.litigation_check = litigationCheck;
+
+    // An active litigation match is disqualifying, same as a tamper
+    // mismatch or a duplicate e-Stamp — this is exactly the kind of
+    // finding a standard field-by-field document check would miss
+    // entirely, since the document itself looks completely normal.
+    if (litigationCheck.status === 'active_case_found') {
+      cleanVerifyJson.risk_level = 'HIGH';
+      if (Array.isArray(cleanVerifyJson.audit_findings)) {
+        for (const m of litigationCheck.matches) {
+          cleanVerifyJson.audit_findings.push(
+            `[Litigation Check — Simulated]: Property/owner matches active case ${m.case_no}${m.case_title ? ` (${m.case_title})` : ''} — ${m.status_text}.`
+          );
+        }
+      }
+    }
+
     const { error: verifyInsertError } = await supabase.from('verifications').insert({
       land_record_id: recordIds[0] || null,
       land_record_ids: recordIds,
@@ -540,6 +619,7 @@ so you do not need to invent a special value for that case yourself.
       same_parcel_batch: cleanVerifyJson.same_parcel_batch ?? null,
       tamper_check: cleanVerifyJson.tamper_check ?? null,
       e_stamp_check: cleanVerifyJson.e_stamp_check ?? null,
+      litigation_check: cleanVerifyJson.litigation_check ?? null,
     });
 
     // The audit result itself is always returned to the user below —

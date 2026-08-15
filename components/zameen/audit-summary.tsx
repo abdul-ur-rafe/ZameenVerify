@@ -9,6 +9,7 @@ import { RiskBar } from "./risk-bar"
 import { CheckRow } from "./check-row"
 import { TamperCheckRow } from "./tamper-check-card"
 import { EStampCheckCard } from "./estamp-check-card"
+import { LitigationCheckRow } from "./litigation-check-card"
 import { WarningNotice } from "./warning-notice"
 
 export function AuditSummary({
@@ -213,6 +214,13 @@ export function AuditSummary({
         {verification.e_stamp_check && (
           <div className="mt-3">
             <EStampCheckCard result={verification.e_stamp_check} />
+          </div>
+        )}
+
+        {/* Simulated litigation cross-reference */}
+        {verification.litigation_check && (
+          <div className="mt-3">
+            <LitigationCheckRow result={verification.litigation_check} />
           </div>
         )}
 
