@@ -48,17 +48,30 @@ function buildSummary(record: LandRecord): { label: string; value: string; field
   return out
 }
 
-/** True if this record has at least one field whose confidence is
- * below LOW_CONFIDENCE_THRESHOLD. Only meaningful for
+/** True if this record has at least one NON-EMPTY field whose
+ * confidence is below LOW_CONFIDENCE_THRESHOLD. Only meaningful for
  * ingestion_mode "legacy" — standard-mode records never carry
  * field_confidence, so this is always false for them, which is
  * correct: there is no partial-confidence state to warn about on a
- * typed document that either read clearly or came back blank. */
+ * typed document that either read clearly or came back blank.
+ *
+ * The non-empty check matters: a field that doesn't apply to this
+ * document type (e.g. buyer_name on a Fard Malkiat) legitimately comes
+ * back as an empty string with confidence 0 — that's "nothing to
+ * read," not "read poorly." Checking field_confidence values alone,
+ * without also checking whether the record actually has a value for
+ * that field, flags every document as needing review regardless of
+ * how well it was actually read, since most documents leave most of
+ * the ~20 possible fields blank. Confirmed via a real extraction
+ * response where every field the model could read scored 0.95+, but
+ * roughly a dozen not-applicable fields sat at 0 and were triggering
+ * the warning on their own. */
 function hasLowConfidenceField(record: LandRecord): boolean {
   if (record.ingestion_mode !== "legacy" || !record.field_confidence) return false
-  return Object.values(record.field_confidence).some(
-    (c) => typeof c === "number" && c < LOW_CONFIDENCE_THRESHOLD
-  )
+  return Object.entries(record.field_confidence).some(([field, c]) => {
+    if (typeof c !== "number" || c >= LOW_CONFIDENCE_THRESHOLD) return false
+    return hasValue(record[field as keyof LandRecord])
+  })
 }
 
 export function DocumentCard({ item, index }: { item: BatchItem; index: number }) {

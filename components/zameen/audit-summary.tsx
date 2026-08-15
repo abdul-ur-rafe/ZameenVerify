@@ -126,8 +126,7 @@ export function AuditSummary({
             <div>
               <h2 className="text-lg font-semibold text-white">Risk Assessment</h2>
               <p className="text-sm text-zinc-400">
-                Cross-document audit across {documentCount}{" "}
-                {documentCount === 1 ? "document" : "documents"}
+                {documentCount === 1 ? "Document audit across 1 document" : `Cross-document audit across ${documentCount} documents`}
               </p>
             </div>
           </div>
