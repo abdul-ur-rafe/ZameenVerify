@@ -130,6 +130,15 @@ export function DocumentCard({ item, index }: { item: BatchItem; index: number }
                   <span
                     className={isLow ? "text-amber-400" : "text-zinc-300"}
                     title={isLow ? `Low confidence (${Math.round((conf as number) * 100)}%) — verify against source` : undefined}
+                    // dir="auto" lets the browser detect each value's own
+                    // script direction independently (Urdu vs English),
+                    // rather than inheriting the card's LTR layout — a
+                    // Mode 1 record can legitimately have an Urdu-script
+                    // owner_name next to an English-script district, per
+                    // RULE 3C in the OCR prompt, and each needs to render
+                    // in its own correct direction rather than all being
+                    // forced left-to-right.
+                    dir="auto"
                   >
                     {s.value}
                     {isLow && <span className="ml-1 text-[10px]">⚠</span>}

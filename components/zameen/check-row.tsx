@@ -36,7 +36,9 @@ export function CheckRow({
           </span>
         </div>
         {reasoning && (
-          <p className="mt-1 text-sm leading-relaxed text-zinc-400 text-pretty">{reasoning}</p>
+          <p className="mt-1 text-sm leading-relaxed text-zinc-400 text-pretty" dir="auto">
+            {reasoning}
+          </p>
         )}
       </div>
     </div>

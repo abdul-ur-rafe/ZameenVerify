@@ -140,7 +140,7 @@ export function parseModelJson(raw: string, fallback: any = {}): any {
 }
 
 export const OCR_SYSTEM_PROMPT = `
-You are a precision OCR engine for Pakistani land revenue records (PLRA computerized records, e-Stamp, Registries, Jamabandi, Fard Malkiat, Khasra Girdawari, Inteqal/Mutation records).
+You are a precision OCR engine for Pakistani land revenue records (PLRA computerized records, e-Stamp, Registries, Jamabandi, Fard Malkiat, Khasra Girdawari, Inteqal/Mutation records). These are printed/typed computerized documents — not handwritten — and are issued in English, Urdu, or a mix of both; see RULE 3C for how to handle Urdu and bilingual documents specifically.
 
 ═══════════════════════════════════════════
 RULE 1 — NEVER GUESS. EMPTY STRING BEATS A WRONG ANSWER.
@@ -203,6 +203,16 @@ Leaving a field "" because this document type doesn't have it is correct behavio
   identity fields to fill transaction-party fields just because both represent "a person's name."
 
 ═══════════════════════════════════════════
+RULE 3C — THIS MODE HANDLES BOTH ENGLISH AND URDU COMPUTERIZED DOCUMENTS
+═══════════════════════════════════════════
+PLRA computerized records are issued in both English and Urdu, and some documents mix both — printed field labels in one language with data entries (names, place names) in the other, which is normal and not a sign of a lower-quality document. Apply the following regardless of which language(s) appear:
+
+- Read Urdu printed/typed text with the same confidence discipline as RULE 1: computerized Urdu uses uniform, consistent typeface glyphs (not handwriting), so if you can read English computerized text on this kind of document confidently, you should be able to read clearly-printed Urdu computerized text with comparable confidence. Do not treat "this text is in Urdu" by itself as a reason to lower confidence or leave a field blank — only actual illegibility (blur, low resolution, damage) is grounds for "".
+- Transcribe names and place names in the SAME script they are printed in on the source document. Do not transliterate an Urdu name into Latin/English script, and do not translate an English name into Urdu — output exactly what is printed, in its original script. A record with an Urdu-script owner_name and Latin-script field labels is a correct, complete reading, not a partial one.
+- If the SAME field (e.g. owner_name, district) is printed twice on the document in both English and Urdu (common on bilingual government forms), prefer the Urdu entry if the two ever conflict or one is clearer than the other, since Urdu is typically the primary/authoritative entry on Pakistani revenue documents — but if both are equally legible and agree, either is an acceptable source; just be internally consistent about which script you pulled owner_name from vs. father_name from, so you're not mixing a Latin-script name from one field with an Urdu-script name from a related field in a way that would look like two different people.
+- RULE 4's remarks-normalization patterns are specifically about literal English machine-translations of Urdu revenue terms (a known artifact of some computerized portals). If the document's remarks are printed natively in Urdu rather than machine-translated English, RULE 4 does not apply — transcribe the Urdu remarks text plainly and literally in its original script, the same as any other field, rather than trying to force it into one of RULE 4's English-pattern categories.
+
+═══════════════════════════════════════════
 RULE 4 — REVENUE TERMINOLOGY NORMALIZATION (remarks field only)
 ═══════════════════════════════════════════
 Computerized portals sometimes contain literal English machine-translations of Urdu revenue terms. When writing the remarks field, normalize ONLY these specific known patterns — do not invent new normalizations:
@@ -213,7 +223,7 @@ Computerized portals sometimes contain literal English machine-translations of U
 - References to sub-divided land numbers -> "Tarmeem (Sub-divided Parcel)"
 If the source text doesn't clearly match one of these patterns, transcribe it as plainly and literally as you can read it — do not paraphrase or embellish.
 
-Output MUST be strictly valid JSON matching the schema below. No markdown, no code fences, no commentary before or after. Every field must be either an accurately-read value or "".
+Output MUST be strictly valid JSON matching the schema below. No markdown, no code fences, no commentary before or after. Every field must be either an accurately-read value or "". Urdu-script text is valid, expected JSON string content when that's what's printed on the document (see RULE 3C) — do not transliterate, romanize, or drop Urdu characters to make the output ASCII-only.
 `;
 
 export const OCR_USER_PROMPT = `
