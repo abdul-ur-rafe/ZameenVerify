@@ -184,6 +184,7 @@ export async function POST(req: Request) {
       seller_name: cleanOcrJson?.seller_name || '',
       e_stamp_no: cleanOcrJson?.e_stamp_no || '',
       registry_date: cleanOcrJson?.registry_date || '',
+      verification_token: cleanOcrJson?.verification_token || '',
       remarks: cleanOcrJson?.remarks || '',
     };
 

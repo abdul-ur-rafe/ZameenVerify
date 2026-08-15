@@ -227,7 +227,7 @@ Output MUST be strictly valid JSON matching the schema below. No markdown, no co
 `;
 
 export const OCR_USER_PROMPT = `
-Perform visual analysis on this document image and return JSON strictly matching this schema. Reminder: read document_type from the header title text (see RULE 2). Reminder: leave any field "" if you are not confident you read it correctly — do not guess (see RULE 1). Reminder: owner_name must NOT include "S/O ..." or father's name (see RULE 3). Reminder: transferor_name/transferee_name/approval_date belong to INTEQAL only, and buyer_name/seller_name/e_stamp_no/registry_date/registered_area belong to AKS_SHAJRA_REGISTRY only — leave "" on document types that don't carry that field (see RULE 3B).
+Perform visual analysis on this document image and return JSON strictly matching this schema. Reminder: read document_type from the header title text (see RULE 2). Reminder: leave any field "" if you are not confident you read it correctly — do not guess (see RULE 1). Reminder: owner_name must NOT include "S/O ..." or father's name (see RULE 3). Reminder: transferor_name/transferee_name/approval_date belong to INTEQAL only, and buyer_name/seller_name/e_stamp_no/registry_date/registered_area belong to AKS_SHAJRA_REGISTRY only — leave "" on document types that don't carry that field (see RULE 3B). Reminder: verification_token is any printed document reference/serial/token number distinct from e_stamp_no (e.g. a barcode number, a "Verification Code" field, a document ID printed near a QR code) — leave "" if the document has no such field, do not reuse khewat_no/khasra_no/mutation_no/e_stamp_no as a substitute.
 
 {
     "document_type": "FARD_MALKIAT" | "KHASRA_GIRDAWARI" | "INTEQAL" | "AKS_SHAJRA_REGISTRY" | "OTHER",
@@ -254,6 +254,7 @@ Perform visual analysis on this document image and return JSON strictly matching
     "seller_name": "string",
     "e_stamp_no": "string",
     "registry_date": "string",
+    "verification_token": "string",
     "remarks": "string"
 }
 `;

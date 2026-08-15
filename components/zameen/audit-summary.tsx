@@ -7,6 +7,8 @@ import type { AuditVerification, LandRecord } from "@/lib/types"
 import { RiskBadge, riskDescription } from "./risk-badge"
 import { RiskBar } from "./risk-bar"
 import { CheckRow } from "./check-row"
+import { TamperCheckRow } from "./tamper-check-card"
+import { EStampCheckCard } from "./estamp-check-card"
 import { WarningNotice } from "./warning-notice"
 
 export function AuditSummary({
@@ -194,6 +196,25 @@ export function AuditSummary({
             <CheckRow key={c.label} label={c.label} passed={c.passed} reasoning={c.reasoning} />
           ))}
         </div>
+
+        {/* Simulated registry tamper check — kept outside the grid,
+            full-width, since its "not checked" state and Simulated
+            label need more room than the two-column grid gives the
+            other checks. */}
+        {verification.tamper_check && (
+          <div className="mt-3">
+            <TamperCheckRow result={verification.tamper_check} />
+          </div>
+        )}
+
+        {/* e-Stamp serial validation — only rendered when there's an
+            actual finding to show (see EStampCheckCard for why there's
+            no separate "all clear" state). */}
+        {verification.e_stamp_check && (
+          <div className="mt-3">
+            <EStampCheckCard result={verification.e_stamp_check} />
+          </div>
+        )}
 
         {/* Findings */}
         {audit_findings.length > 0 && (

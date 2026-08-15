@@ -47,6 +47,14 @@ export interface LandRecord {
   registry_date?: string
   remarks?: string
   file_url?: string
+  /** A document reference/verification token or serial number printed
+   * on the document itself (e.g. "PLRA-2026-99X7"), distinct from
+   * e_stamp_no — some document types (Fard Malkiat, Khasra Girdawari)
+   * carry a document reference number without being an e-Stamp deed.
+   * Used by the SIMULATED registry cross-check in /api/audit — see the
+   * tamper-detection note in that file for what this does and does not
+   * actually verify. */
+  verification_token?: string
   /** Only populated when ingestion_mode === "legacy". Maps a field name
    * (matching a LandRecord key above) to the model's confidence 0-1
    * that the extracted value is correct. A field with no entry here
@@ -88,6 +96,74 @@ export interface AuditVerification {
   }
   risk_level: RiskLevel
   audit_findings: string[]
+  /** Result of cross-checking each record's verification_token against
+   * a SIMULATED mock registry table (mock_plra_registry in Supabase) —
+   * this is a demo stand-in for a real PLRA API integration, which
+   * isn't publicly available. Undefined when no record in the batch
+   * had a verification_token to check at all (not the same as "checked
+   * and passed" — see TamperCheckResult below). */
+  tamper_check?: TamperCheckResult
+  /** Result of validating e-Stamp serial numbers across the batch —
+   * see EStampCheckResult below for what this does and does not
+   * actually verify. Undefined when no record in the batch had an
+   * e_stamp_no to check at all. */
+  e_stamp_check?: EStampCheckResult
+}
+
+/** status meanings:
+ * "no_token" — no record in the batch had a verification_token field
+ *   populated, so no registry check could be attempted at all. This is
+ *   NOT a pass or a fail — it's "nothing to check," and the UI must not
+ *   present it as either.
+ * "match" — every token found was present in the mock registry AND the
+ *   registry's snapshot data agreed with what was extracted from the
+ *   document (owner_name, area, khasra_no).
+ * "not_found" — a token was present on the document but has no
+ *   matching row in the mock registry at all (could mean: token doesn't
+ *   exist, or simply isn't seeded in this demo dataset — the UI copy
+ *   must not overclaim "this token is fake," only that it couldn't be
+ *   verified against the (simulated) registry).
+ * "mismatch" — the token WAS found in the registry, but one or more
+ *   fields extracted from the document disagree with the registry's
+ *   snapshot for that token. This is the actual tamper signal.
+ */
+export type TamperCheckStatus = "no_token" | "match" | "not_found" | "mismatch"
+
+export interface TamperCheckResult {
+  status: TamperCheckStatus
+  token?: string
+  /** Only populated when status is "mismatch" — which specific fields
+   * disagreed, in plain language, e.g. "owner_name: document says
+   * 'Tariq Mahmood', registry snapshot says 'Ahmed Khan'". */
+  mismatched_fields?: string[]
+}
+
+/** Results of validating e-Stamp serial numbers (e_stamp_no) on
+ * AKS_SHAJRA_REGISTRY documents in the batch. Three checks, all
+ * mechanical/deterministic (no LLM involved — see the comment in
+ * app/api/audit/route.ts for why):
+ *
+ * missing_on: e_stamp_no is blank on a registry-type document that
+ *   should have one. A real completeness gap.
+ *
+ * duplicate_across_batch: the SAME e_stamp_no string appears on more
+ *   than one document in this batch. One e-Stamp paper legitimately
+ *   backs exactly one transaction, so this is a genuine, mechanically-
+ *   checkable fraud signal — not simulated data, this check works the
+ *   same way against real documents.
+ *
+ * format_warnings: a GENERIC plausibility check (e.g. suspiciously
+ *   short, all-zeros, obviously placeholder-looking) — NOT a real
+ *   Punjab e-Stamp format validator. There is no public specification
+ *   of the actual serial format to validate against, so this must
+ *   never be presented as "we verified this against the real format."
+ *   The UI labels this "Format sanity check" for that reason, distinct
+ *   from missing/duplicate which are real structural findings.
+ */
+export interface EStampCheckResult {
+  missing_on: string[] // file names or record identifiers missing e_stamp_no
+  duplicate_across_batch: { token: string; recordLabels: string[] }[]
+  format_warnings: { recordLabel: string; token: string; reason: string }[]
 }
 
 export interface AuditResponse {

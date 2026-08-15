@@ -331,6 +331,201 @@ so you do not need to invent a special value for that case yourself.
 
     const recordIds = records.map((r: any) => r.id).filter(Boolean);
 
+    // --- SIMULATED registry tamper check ---------------------------------
+    // This is a demo stand-in for a real PLRA API integration, which
+    // isn't publicly accessible — see supabase-mock-plra-registry.sql
+    // for the full explanation. Deliberately implemented as a direct DB
+    // lookup + string comparison, NOT another LLM call: this is exactly
+    // the kind of exact-match fact-checking a model shouldn't be trusted
+    // to do reliably, and it mirrors this route's existing pattern of
+    // keeping anything mechanically verifiable out of the LLM's hands
+    // (see the risk-level and khasra-match overrides above).
+    let tamperCheck: any = undefined;
+    const tokens: string[] = records
+      .map((r: any) => (typeof r?.verification_token === 'string' ? r.verification_token.trim() : ''))
+      .filter((t: string) => t.length > 0);
+
+    if (tokens.length === 0) {
+      tamperCheck = { status: 'no_token' };
+    } else {
+      // Only check the first token found — this feature is scoped to a
+      // single-document tamper check for now, matching how the rest of
+      // this route treats records.length === 1 as the common case.
+      const token = tokens[0];
+      const { data: registryRow, error: registryError } = await supabase
+        .from('mock_plra_registry')
+        .select('*')
+        .eq('verification_token', token)
+        .maybeSingle();
+
+      if (registryError) {
+        console.error('mock_plra_registry lookup failed:', registryError);
+        tamperCheck = { status: 'not_found', token };
+      } else if (!registryRow) {
+        tamperCheck = { status: 'not_found', token };
+      } else {
+        const sourceRecord = records.find((r: any) => r?.verification_token?.trim() === token);
+        const mismatches: string[] = [];
+
+        // Normalize before comparing: OCR'd text can differ in
+        // whitespace/case from the registry snapshot without being an
+        // actual content disagreement (e.g. "Tariq Mahmood" vs "tariq
+        // mahmood "). Only flag a REAL content mismatch, not formatting
+        // noise — same discipline as the area_match check above, which
+        // already treats notation differences as non-mismatches.
+        const normalize = (v: unknown) => (typeof v === 'string' ? v.trim().toLowerCase() : '');
+
+        if (registryRow.owner_name && sourceRecord?.owner_name) {
+          if (normalize(registryRow.owner_name) !== normalize(sourceRecord.owner_name)) {
+            mismatches.push(
+              `owner_name: document says "${sourceRecord.owner_name}", registry snapshot says "${registryRow.owner_name}"`
+            );
+          }
+        }
+        if (registryRow.district && sourceRecord?.district) {
+          if (normalize(registryRow.district) !== normalize(sourceRecord.district)) {
+            mismatches.push(
+              `district: document says "${sourceRecord.district}", registry snapshot says "${registryRow.district}"`
+            );
+          }
+        }
+        if (registryRow.khasra_no && sourceRecord?.khasra_no) {
+          if (normalize(registryRow.khasra_no) !== normalize(sourceRecord.khasra_no)) {
+            mismatches.push(
+              `khasra_no: document says "${sourceRecord.khasra_no}", registry snapshot says "${registryRow.khasra_no}"`
+            );
+          }
+        }
+        if (registryRow.total_area && sourceRecord?.total_area) {
+          if (normalize(registryRow.total_area) !== normalize(sourceRecord.total_area)) {
+            mismatches.push(
+              `total_area: document says "${sourceRecord.total_area}", registry snapshot says "${registryRow.total_area}"`
+            );
+          }
+        }
+
+        tamperCheck =
+          mismatches.length > 0
+            ? { status: 'mismatch', token, mismatched_fields: mismatches }
+            : { status: 'match', token };
+      }
+    }
+
+    cleanVerifyJson.tamper_check = tamperCheck;
+
+    // A confirmed tamper mismatch is a disqualifying fraud signal in
+    // its own right — mirrors how encumbrance_free/title_chain_verified
+    // failures already force HIGH above, regardless of what else
+    // passed. Applied AFTER the existing risk_level computation so it
+    // can only ever raise severity, never lower what the other checks
+    // already determined.
+    if (tamperCheck.status === 'mismatch') {
+      cleanVerifyJson.risk_level = 'HIGH';
+      if (Array.isArray(cleanVerifyJson.audit_findings)) {
+        cleanVerifyJson.audit_findings.push(
+          `[Tamper Detection — Simulated]: Document data does not match the simulated registry snapshot for token ${tamperCheck.token}. Potential tampering.`
+        );
+      }
+    }
+
+    // --- e-Stamp serial validation ----------------------------------------
+    // Three checks, deliberately kept separate in severity because they
+    // are not equally trustworthy findings — see EStampCheckResult's
+    // doc comment in lib/types.ts for the full explanation of each.
+    // "missing" and "duplicate" are real structural findings that work
+    // the same way against real documents. "format_warnings" is a
+    // generic plausibility heuristic, NOT a real Punjab e-Stamp format
+    // validator — there is no public specification of the actual
+    // serial format to check against, so this must never be labeled or
+    // treated as equivalent to an official validation. It is scored
+    // lower severity than the other two for exactly this reason.
+    function labelForRecord(r: any, idx: number): string {
+      return r?.owner_name || r?.document_type || `Document ${idx + 1}`;
+    }
+
+    const missingOn: string[] = [];
+    const tokenToLabels = new Map<string, string[]>();
+    const formatWarnings: { recordLabel: string; token: string; reason: string }[] = [];
+
+    records.forEach((r: any, idx: number) => {
+      const label = labelForRecord(r, idx);
+      const isRegistryDoc = r?.document_type === 'AKS_SHAJRA_REGISTRY';
+      const token = typeof r?.e_stamp_no === 'string' ? r.e_stamp_no.trim() : '';
+
+      if (isRegistryDoc && !token) {
+        missingOn.push(label);
+        return;
+      }
+      if (!token) return; // not a registry doc and no token — nothing to check
+
+      const existing = tokenToLabels.get(token) || [];
+      existing.push(label);
+      tokenToLabels.set(token, existing);
+
+      // Generic plausibility heuristic ONLY — see comment above. Real
+      // e-Stamp serials are longer, alphanumeric identifiers; these are
+      // the kind of thing that would only ever appear on an obviously
+      // fabricated or placeholder document (a single repeated digit,
+      // or a suspiciously short value), not a genuine format check.
+      const isSuspiciouslyShort = token.length < 4;
+      const isAllSameDigit = /^(\d)\1+$/.test(token);
+      const looksLikePlaceholder = /^(test|sample|xxxx|0000|1234)$/i.test(token);
+      if (isSuspiciouslyShort || isAllSameDigit || looksLikePlaceholder) {
+        formatWarnings.push({
+          recordLabel: label,
+          token,
+          reason: isAllSameDigit
+            ? 'repeated single digit'
+            : looksLikePlaceholder
+              ? 'looks like placeholder text'
+              : 'unusually short for a serial number',
+        });
+      }
+    });
+
+    const duplicateAcrossBatch = Array.from(tokenToLabels.entries())
+      .filter(([, labels]) => labels.length > 1)
+      .map(([token, recordLabels]) => ({ token, recordLabels }));
+
+    const eStampCheck =
+      missingOn.length > 0 || duplicateAcrossBatch.length > 0 || formatWarnings.length > 0
+        ? { missing_on: missingOn, duplicate_across_batch: duplicateAcrossBatch, format_warnings: formatWarnings }
+        : undefined;
+
+    if (eStampCheck) {
+      cleanVerifyJson.e_stamp_check = eStampCheck;
+    }
+
+    // A duplicate e-Stamp serial across the batch is a real,
+    // non-simulated fraud signal — one stamp paper cannot legitimately
+    // back two different transactions. This is disqualifying the same
+    // way a tamper mismatch is. Missing/format-warning findings are
+    // surfaced in audit_findings but do NOT force risk_level up on
+    // their own, since a missing field alone is a completeness gap
+    // (already handled by the existing MEDIUM cap logic above) and a
+    // format warning is only a generic heuristic, not a confirmed
+    // problem.
+    if (duplicateAcrossBatch.length > 0) {
+      cleanVerifyJson.risk_level = 'HIGH';
+      if (Array.isArray(cleanVerifyJson.audit_findings)) {
+        for (const dup of duplicateAcrossBatch) {
+          cleanVerifyJson.audit_findings.push(
+            `[e-Stamp Validation]: Serial "${dup.token}" appears on multiple documents in this batch (${dup.recordLabels.join(', ')}) — one e-Stamp cannot back two transactions.`
+          );
+        }
+      }
+    }
+    if (missingOn.length > 0 && Array.isArray(cleanVerifyJson.audit_findings)) {
+      cleanVerifyJson.audit_findings.push(
+        `[e-Stamp Validation]: ${missingOn.length} registry document(s) missing an e-Stamp serial number.`
+      );
+    }
+    if (formatWarnings.length > 0 && Array.isArray(cleanVerifyJson.audit_findings)) {
+      cleanVerifyJson.audit_findings.push(
+        `[e-Stamp Validation — Format Sanity Check]: ${formatWarnings.length} serial number(s) look implausible on basic inspection (not a verified format check).`
+      );
+    }
+
     const { error: verifyInsertError } = await supabase.from('verifications').insert({
       land_record_id: recordIds[0] || null,
       land_record_ids: recordIds,
@@ -343,6 +538,8 @@ so you do not need to invent a special value for that case yourself.
       audit_findings: cleanVerifyJson.audit_findings,
       reasoning: cleanVerifyJson.reasoning || null,
       same_parcel_batch: cleanVerifyJson.same_parcel_batch ?? null,
+      tamper_check: cleanVerifyJson.tamper_check ?? null,
+      e_stamp_check: cleanVerifyJson.e_stamp_check ?? null,
     });
 
     // The audit result itself is always returned to the user below —
