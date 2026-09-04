@@ -2,15 +2,10 @@ import { ShieldCheck, ShieldAlert, ShieldQuestion } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { TamperCheckResult } from "@/lib/types"
 
-/** Renders the result of the SIMULATED registry tamper check. Kept as
- * its own component rather than reused inside CheckRow because this
- * check has three genuinely different states — match / mismatch / no
- * token to check — and "no token" is neither a pass nor a fail. Forcing
- * it into CheckRow's boolean passed/failed badge would misrepresent
- * "we didn't check this" as either a clean result or a problem, which
- * is exactly the kind of overclaim this whole feature needs to avoid
- * given it's simulated data in the first place. */
 export function TamperCheckRow({ result }: { result: TamperCheckResult }) {
+  // Completely hide/disable this check component
+  return null
+
   if (result.status === "no_token") {
     return (
       <div className="flex items-start gap-3 rounded-md border border-white/10 bg-white/[0.02] p-3">
