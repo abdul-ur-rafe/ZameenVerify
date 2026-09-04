@@ -11,7 +11,7 @@ ZameenVerify analyzes Pakistani land records such as **Fard, Intiqal, Khasra, an
 </p>
 
 <p align="center">
-  <img src="./public/landing-page.png" alt="ZameenVerify Landing Page" width="900">
+  <img src="./public/landing page.png" alt="ZameenVerify Landing Page" width="900">
 </p>
 
 ## What it does
