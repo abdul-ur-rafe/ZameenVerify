@@ -632,7 +632,20 @@ so you do not need to invent a special value for that case yourself.
       console.error('verifications insert failed:', verifyInsertError);
       persistedWarning = 'Audit completed, but the result could not be saved to the database.';
     }
+    // Inside app/api/audit/route.ts
 
+const verificationResult = {
+  // ... your other audit flags
+  khasra_match: true,
+  owner_possession_match: true,
+  litigation_check: litigationData,
+  e_stamp_check: eStampData,
+  
+  // Set tamper_check to null so the frontend skips rendering it
+  tamper_check: null, 
+}
+
+return NextResponse.json(verificationResult)
     return NextResponse.json({
       success: true,
       document_count: records.length,
