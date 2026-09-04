@@ -9,7 +9,13 @@ three owners back. Most buyers only find out after the money has moved.
 
 **ZameenVerify reads the documents the way a good lawyer would — and flags what a buyer usually can't see.**
 
+
 🏆 Built for the **Banoqabil AI Hackathon**, powered by Alibaba Cloud
+=======
+<p align="center">
+  <img src="./public/landing-page.png" alt="ZameenVerify Landing Page" width="900">
+</p>
+
 
 <a href="https://zameenverify.vercel.app/">
   <strong>🌐 Try the live app →</strong>
