@@ -17,11 +17,6 @@ three owners back. Most buyers only find out after the money has moved.
 </p>
 
 
-<a href="https://zameenverify.vercel.app/">
-  <strong>🌐 Try the live app →</strong>
-</a>
-
-<img src="./public/landing-page.png" alt="ZameenVerify Landing Page" width="900">
 
 </div>
 
